@@ -2,6 +2,11 @@
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
+# Streamlit Community Cloud installs deps via Poetry when pyproject.toml exists.
+# This repo is flat modules + setuptools; Poetry must not try to install a package root.
+[tool.poetry]
+package-mode = false
+
 [project]
 name = "startup-vs-market"
 version = "0.1.0"
