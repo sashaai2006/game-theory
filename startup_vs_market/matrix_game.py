@@ -5,7 +5,7 @@ from typing import Any
 import numpy as np
 from scipy.optimize import linprog
 
-from config import COL_NAMES, MATRIX, ROW_NAMES
+from .config import COL_NAMES, MATRIX, ROW_NAMES
 
 
 def saddle_point(matrix: np.ndarray) -> tuple[float, float, tuple[int, int] | None]:

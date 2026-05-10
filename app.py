@@ -3,8 +3,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from config import COL_NAMES, MATRIX, ROW_NAMES
-from matrix_game import run_all_computations
+from startup_vs_market.config import COL_NAMES, MATRIX, ROW_NAMES
+from startup_vs_market.matrix_game import run_all_computations
 
 st.set_page_config(
     page_title="Теория игр: Стартап vs Рынок",

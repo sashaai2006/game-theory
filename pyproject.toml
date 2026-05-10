@@ -2,11 +2,6 @@
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
-# Streamlit Community Cloud installs deps via Poetry when pyproject.toml exists.
-# This repo is flat modules + setuptools; Poetry must not try to install a package root.
-[tool.poetry]
-package-mode = false
-
 [project]
 name = "startup-vs-market"
 version = "0.1.0"
@@ -28,7 +23,7 @@ dev = [
 ]
 
 [tool.setuptools]
-py-modules = ["app", "config", "matrix_game"]
+packages = ["startup_vs_market"]
 
 [tool.ruff]
 target-version = "py311"
@@ -42,4 +37,4 @@ ignore = ["E501", "E702", "B905"]
 python_version = "3.11"
 warn_return_any = false
 ignore_missing_imports = true
-modules = ["matrix_game", "config"]
+modules = ["startup_vs_market.matrix_game", "startup_vs_market.config"]
