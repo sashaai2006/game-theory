@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "startup-vs-market"
+version = "0.1.0"
+description = "Матричная игра «Стартап vs Рынок»: Streamlit и расчёты теории игр"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "streamlit>=1.35.0",
+    "numpy>=1.26.0",
+    "scipy>=1.13.0",
+    "pandas>=2.2.0",
+    "plotly>=5.22.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.8",
+    "mypy>=1.13",
+]
+
+[tool.setuptools]
+py-modules = ["app", "config", "matrix_game"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501", "E702", "B905"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = false
+ignore_missing_imports = true
+modules = ["matrix_game", "config"]
