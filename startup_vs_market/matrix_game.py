@@ -7,6 +7,121 @@ from scipy.optimize import linprog
 
 from .config import COL_NAMES, MATRIX, ROW_NAMES
 
+# ---------------------------------------------------------------------------
+# Pure simplex method (Tableau form)
+# ---------------------------------------------------------------------------
+
+
+def solve_simplex(
+    matrix: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, float, dict[str, Any]]:
+    """Solve the matrix game with the **pure simplex method** (no external LP solver).
+
+    Formulation used (Player B – minimiser):
+        max  1ᵀ y
+        s.t. A' y + s = 1_m,   y ≥ 0,  s ≥ 0          (1)
+    where A' = matrix + c_shift (all entries > 0).
+    The initial BFS is y = 0, s = 1 (slack variables as basis).
+
+    Player A's optimal mixed strategy is extracted from the **dual solution**:
+    the shadow-prices of (1) equal the optimal x for the dual LP
+        min  1ᵀ x
+        s.t. A'ᵀ x ≥ 1_n,   x ≥ 0                      (2)
+    These shadow-prices appear in the final objective row at the slack columns.
+
+    Returns
+    -------
+    p_opt : ndarray  – Player A's optimal mixed strategy
+    q_opt : ndarray  – Player B's optimal mixed strategy
+    v_opt : float    – Value of the game
+    info  : dict     – Tableau snapshots and metadata for UI display
+    """
+    m_rows, n_cols = matrix.shape
+    c_shift = max(0.0, -matrix.min()) + 1.0
+    A = matrix + c_shift  # shifted matrix, all entries > 0
+
+    # ---- Build initial tableau ------------------------------------------------
+    # Variables layout: [y_1 … y_n | s_1 … s_m | b]
+    n_vars = n_cols + m_rows
+    T = np.zeros((m_rows + 1, n_vars + 1))
+
+    T[:m_rows, :n_cols] = A                            # coefficients of y
+    T[:m_rows, n_cols:n_vars] = np.eye(m_rows)        # identity for slacks
+    T[:m_rows, n_vars] = 1.0                           # RHS = 1
+
+    # Objective row (tracking  z - cᵀx = 0,  c = [1…1, 0…0])
+    # We store the negated reduced costs; RHS accumulates z.
+    T[m_rows, :n_cols] = -1.0  # for y variables
+    # Slack columns start at 0 (c_slack = 0)
+
+    basis = list(range(n_cols, n_vars))  # initially all slack variables
+
+    # ---- Pivot iterations -----------------------------------------------------
+    tableau_snapshots: list[dict[str, Any]] = []
+
+    def _snapshot(it: int, entering: int, leaving: int) -> None:
+        tableau_snapshots.append({
+            "iteration": it,
+            "entering": entering,  # column index
+            "leaving": leaving,    # column index (basis var being removed)
+            "tableau": T.copy(),   # snapshot BEFORE pivot
+        })
+
+    max_iter = 10 * n_vars
+    for iteration in range(1, max_iter + 1):
+        obj_row = T[m_rows, :n_vars]
+        j_enter = int(np.argmin(obj_row))
+
+        if obj_row[j_enter] >= -1e-9:
+            break  # optimality reached
+
+        # Minimum-ratio test
+        col = T[:m_rows, j_enter]
+        rhs = T[:m_rows, n_vars]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            ratios = np.where(col > 1e-9, rhs / col, np.inf)
+        i_leave = int(np.argmin(ratios))
+
+        _snapshot(iteration, j_enter, basis[i_leave])
+
+        # Pivot: normalise leaving row, eliminate column
+        pivot_val = T[i_leave, j_enter]
+        T[i_leave] /= pivot_val
+        for i in range(m_rows + 1):
+            if i != i_leave:
+                T[i] -= T[i, j_enter] * T[i_leave]
+
+        basis[i_leave] = j_enter
+
+    # ---- Extract primal solution (Player B's y) -------------------------------
+    y_opt = np.zeros(n_cols)
+    for idx, b_var in enumerate(basis):
+        if b_var < n_cols:
+            y_opt[b_var] = T[idx, n_vars]
+
+    sum_y = float(y_opt.sum())
+    v_prime = 1.0 / sum_y if sum_y > 1e-12 else 1.0
+    q_opt = y_opt * v_prime
+    v_opt = v_prime - c_shift
+
+    # ---- Extract dual solution (Player A's x) from slack columns of obj row --
+    x_dual = T[m_rows, n_cols:n_vars].copy()
+    sum_x = float(x_dual.sum())
+    p_opt = x_dual / sum_x if sum_x > 1e-12 else np.ones(m_rows) / m_rows
+
+    return p_opt, q_opt, v_opt, {
+        "snapshots": tableau_snapshots,
+        "final_tableau": T.copy(),
+        "basis": basis[:],
+        "c_shift": float(c_shift),
+        "A_shifted": A.copy(),
+        "n_cols": n_cols,
+        "m_rows": m_rows,
+        "n_vars": n_vars,
+        "z_opt": float(T[m_rows, n_vars]),
+        "sum_y": sum_y,
+    }
+
 
 def saddle_point(matrix: np.ndarray) -> tuple[float, float, tuple[int, int] | None]:
     row_mins = matrix.min(axis=1)
@@ -187,6 +302,7 @@ def run_all_computations(n_br_iter: int = 1000) -> dict[str, Any]:
     alpha_red, beta_red, sp_red = saddle_point(red_matrix)
 
     p_lp, q_lp_r, v_lp = solve_lp(red_matrix)
+    p_sx, q_sx_r, v_sx, sx_info = solve_simplex(red_matrix)
     p_br, q_br_r, v_br, v_lo, v_hi, rows_hist, cols_hist = brown_robinson(
         red_matrix, n_iter=n_br_iter
     )
@@ -202,10 +318,12 @@ def run_all_computations(n_br_iter: int = 1000) -> dict[str, Any]:
     q_ex_vec = np.array([q_ex, 1.0 - q_ex])
     n_full = int(MATRIX.shape[1])
     q_lp_full = np.zeros(n_full)
+    q_sx_full = np.zeros(n_full)
     q_br_full = np.zeros(n_full)
     q_ex_full = np.zeros(n_full)
     for ir, io in enumerate(kept):
         q_lp_full[io] = q_lp_r[ir]
+        q_sx_full[io] = q_sx_r[ir]
         q_br_full[io] = q_br_r[ir]
         q_ex_full[io] = q_ex_vec[ir]
 
@@ -232,6 +350,11 @@ def run_all_computations(n_br_iter: int = 1000) -> dict[str, Any]:
         "q_lp_r": q_lp_r,
         "q_lp_full": q_lp_full,
         "v_lp": v_lp,
+        "p_sx": p_sx,
+        "q_sx_r": q_sx_r,
+        "q_sx_full": q_sx_full,
+        "v_sx": v_sx,
+        "sx_info": sx_info,
         "c_shift": c_shift,
         "p_br": p_br,
         "q_br_r": q_br_r,

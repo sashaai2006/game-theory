@@ -157,7 +157,7 @@ with col_metrics:
 st.markdown("<br>", unsafe_allow_html=True)
 st.markdown(
     '<span class="badge-green">✓ Равновесие Нэша найдено</span>&nbsp;'
-    '<span class="badge-blue">3 метода согласованы</span>&nbsp;'
+    '<span class="badge-blue">4 метода согласованы</span>&nbsp;'
     '<span class="badge-red">«Стабильный» доминируется</span>',
     unsafe_allow_html=True,
 )
@@ -543,35 +543,128 @@ E_2\!\left(\tfrac{3}{8}\right) = -12\cdot\tfrac{3}{8}+21 = -4.5+21 = 16.5 \;\che
     )
     st.plotly_chart(fig_g, use_container_width=True)
 
-    st.markdown('<p class="sec-head">5. Метод линейного программирования</p>',
+    st.markdown('<p class="sec-head">5. Симплекс-метод (чистая реализация)</p>',
                 unsafe_allow_html=True)
 
-    with st.expander("Полный вывод задачи ЛП и замены переменных"):
-        st.markdown("**Исходная задача (Игрок A):**")
+    sx = G["sx_info"]
+    n_c, m_r = sx["n_cols"], sx["m_rows"]
+    cn_sx = G["cn"]   # column names of reduced matrix
+    rn_sx = G["rn"]   # row names of reduced matrix
+
+    with st.expander("Постановка ЛП и замена переменных", expanded=False):
+        st.markdown("**Задача Игрока B (прямая):**")
         st.latex(r"""
-\max_{p,\,v}\; v \quad\text{при}\quad
-\sum_{i=1}^{2} p_i\,a_{ij} \geq v\;(\forall j),\quad
-\sum_{i=1}^{2} p_i = 1,\quad p_i \geq 0
+\max_{y \geq 0}\; \mathbf{1}^\top y
+\quad\text{при}\quad
+A'\,y \leq \mathbf{1}_m,\qquad
+A' = A_{\text{red}} + c
 """)
-        st.markdown(f"**Сдвиг:** $c = {G['c_shift']:.0f}$ (чтобы $v + c > 0$). Вводим $v' = v + c$.")
+        st.markdown(
+            f"**Сдвиг:** $c = {sx['c_shift']:.0f}$ — гарантирует $A' > 0$, "
+            "поэтому задача ЛП имеет ненулевое оптимальное решение."
+        )
         st.latex(r"""
-x_i = \frac{p_i}{v'}\;\Rightarrow\;
-\sum x_i = \frac{1}{v'}\;\Rightarrow\;\max v' \Leftrightarrow \min\sum x_i
+\text{Стандартная форма (добавляем балансовые переменные } s_i\text{):}\\[4pt]
+\max\; \mathbf{1}^\top y\quad
+\text{при}\quad A'\,y + s = \mathbf{1}_m,\quad y,\,s \geq 0
 """)
-        st.markdown("**Стандартная форма (минимизация):**")
+        st.markdown("**Задача Игрока A (двойственная):**")
         st.latex(r"""
-\min_{x\geq 0}\;\mathbf{1}^\top x\quad\text{при}\quad
-(A + c\,\mathbf{1})^\top x \geq \mathbf{1}
+\min_{x \geq 0}\; \mathbf{1}^\top x
+\quad\text{при}\quad
+A'^\top x \geq \mathbf{1}_n
 """)
-        st.markdown(r"**Восстановление:** $v' = 1/\sum x_i$, $p_i = x_i\cdot v'$, $v = v' - c$.")
-        st.markdown(f"""
-**Результат (SciPy HiGHS):**
-- p₁* = **{G['p_lp'][0]:.6f}** ≈ 3/8
-- p₂* = **{G['p_lp'][1]:.6f}** ≈ 5/8  
-- q₁* = **{G['q_lp_r'][0]:.6f}** ≈ 3/8  
-- q₂* = **{G['q_lp_r'][1]:.6f}** ≈ 5/8  
-- v*  = **{G['v_lp']:.6f}** ≈ 16.5
+        st.markdown(r"""
+**Восстановление оптимума:**
+$$v' = \frac{1}{\sum y_i^*},\quad q_j^* = y_j^* \cdot v',\quad
+  p_i^* = \lambda_i \cdot v',\quad v^* = v' - c$$
+где $\lambda_i$ — теневые цены (двойственные переменные) = значения балансовых столбцов
+в целевой строке финального симплекс-табло.
 """)
+
+    with st.expander("Начальное симплекс-табло", expanded=False):
+        st.markdown(
+            f"Размерность: **{m_r} строк** (ограничений) × **{n_c + m_r} переменных** "
+            f"({n_c} — игровые $y$, {m_r} — балансовые $s$). "
+            "Начальный базис: все балансовые переменные."
+        )
+        A_sh = sx["A_shifted"]
+        hdr_cols = [f"y({cn_sx[j]})" for j in range(n_c)] + \
+                   [f"s{i+1}" for i in range(m_r)] + ["b"]
+        init_T = np.zeros((m_r + 1, n_c + m_r + 1))
+        init_T[:m_r, :n_c] = A_sh
+        init_T[:m_r, n_c:n_c + m_r] = np.eye(m_r)
+        init_T[:m_r, -1] = 1.0
+        init_T[m_r, :n_c] = -1.0
+        row_labels = [f"s{i+1}" for i in range(m_r)] + ["z"]
+        df_init = pd.DataFrame(init_T, index=row_labels, columns=hdr_cols)
+        st.dataframe(df_init.style.format("{:.4f}"), use_container_width=True)
+        st.caption(
+            "Строки 1…m — ограничения (RHS = 1). "
+            "Строка z — целевая функция (отрицательные коэффициенты = потенциал входа)."
+        )
+
+    with st.expander(f"Итерации симплекс-метода ({len(sx['snapshots'])} шагов)", expanded=True):
+        for snap in sx["snapshots"]:
+            it = snap["iteration"]
+            j_e = snap["entering"]
+            l_var = snap["leaving"]
+            var_name_e = f"y({cn_sx[j_e]})" if j_e < n_c else f"s{j_e - n_c + 1}"
+            var_name_l = f"y({cn_sx[l_var]})" if l_var < n_c else f"s{l_var - n_c + 1}"
+            st.markdown(
+                f"**Итерация {it}:** входит **{var_name_e}** "
+                f"(отриц. коэфф. в z-строке), выходит **{var_name_l}** (мин. отношение)"
+            )
+            T_snap = snap["tableau"]
+            hdr_s = [f"y({cn_sx[j]})" for j in range(n_c)] + \
+                    [f"s{i+1}" for i in range(m_r)] + ["b"]
+            st.dataframe(
+                pd.DataFrame(T_snap, columns=hdr_s).style.format("{:.4f}"),
+                use_container_width=True,
+            )
+
+    with st.expander("Финальное симплекс-табло и извлечение решения", expanded=True):
+        T_fin = sx["final_tableau"]
+        basis_fin = sx["basis"]
+        hdr_f = [f"y({cn_sx[j]})" for j in range(n_c)] + \
+                [f"s{i+1}" for i in range(m_r)] + ["b"]
+        basis_labels = [
+            (f"y({cn_sx[b]})" if b < n_c else f"s{b - n_c + 1}")
+            for b in basis_fin
+        ] + ["z"]
+        df_fin = pd.DataFrame(T_fin, index=basis_labels, columns=hdr_f)
+        st.dataframe(df_fin.style.format("{:.6f}"), use_container_width=True)
+
+        st.markdown("**Извлечение решения из финального табло:**")
+        sum_y = sx["sum_y"]
+        z_opt = sx["z_opt"]
+        st.latex(
+            rf"\sum y_i^* = {sum_y:.6f},\quad "
+            rf"v' = \frac{{1}}{{\sum y_i^*}} = {1/sum_y:.6f},\quad "
+            rf"v^* = v' - c = {1/sum_y:.6f} - {sx['c_shift']:.0f} = {G['v_sx']:.6f}"
+        )
+        col_px, col_qx = st.columns(2)
+        with col_px:
+            st.markdown("**Стратегия A** (из двойственных переменных — балансовые столбцы z-строки):")
+            for i, _name in enumerate(rn_sx):
+                dual_val = T_fin[m_r, n_c + i]
+                p_i = G["p_sx"][i]
+                st.latex(
+                    rf"\lambda_{i+1} = {dual_val:.6f},"
+                    rf"\quad p_{i+1}^* = \lambda_{i+1}/\sum\lambda = {p_i:.6f}"
+                )
+        with col_qx:
+            st.markdown("**Стратегия B** (из базисных переменных в b-столбце):")
+            for j, name in enumerate(cn_sx):
+                q_j = G["q_sx_r"][j]
+                st.latex(rf"q_{j+1}^* = {q_j:.6f} \quad ({name})")
+
+        st.success(
+            f"✓ Симплекс-метод (без внешних решателей): "
+            f"p*=({G['p_sx'][0]:.4f}, {G['p_sx'][1]:.4f}), "
+            f"q*=({G['q_sx_r'][0]:.4f}, {G['q_sx_r'][1]:.4f}), "
+            f"v*={G['v_sx']:.4f}"
+        )
 
     st.markdown('<p class="sec-head">6. Метод Брауна–Робинсона</p>', unsafe_allow_html=True)
 
@@ -636,14 +729,22 @@ x_i = \frac{p_i}{v'}\;\Rightarrow\;
     )
     st.plotly_chart(fig_br, use_container_width=True)
 
-    st.markdown('<p class="sec-head">7. Сравнение трёх методов</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sec-head">7. Сравнение четырёх методов</p>', unsafe_allow_html=True)
 
     cmp = pd.DataFrame({
-        "Метод": ["Аналитический (формула)", "ЛП (HiGHS симплекс)", "Браун–Робинсон (1000 ит.)"],
-        "p₁* (Лок. деплой)": [G["p_ex"], G["p_lp"][0], G["p_br"][0]],
-        "p₂* (Облачный)":    [1-G["p_ex"], G["p_lp"][1], G["p_br"][1]],
-        "v* (цена игры)":    [G["v_ex"], G["v_lp"], G["v_br"]],
-        "|Δv|":              [0.0, abs(G["v_lp"]-G["v_ex"]), abs(G["v_br"]-G["v_ex"])],
+        "Метод": [
+            "Аналитический (формула 2×2)",
+            "Симплекс-метод (чистый)",
+            "ЛП (SciPy HiGHS — контроль)",
+            "Браун–Робинсон (1000 ит.)",
+        ],
+        "p₁* (Лок. деплой)": [G["p_ex"],   G["p_sx"][0], G["p_lp"][0], G["p_br"][0]],
+        "p₂* (Облачный)":    [1-G["p_ex"], G["p_sx"][1], G["p_lp"][1], G["p_br"][1]],
+        "v* (цена игры)":    [G["v_ex"],   G["v_sx"],    G["v_lp"],    G["v_br"]],
+        "|Δv|":              [0.0,
+                              abs(G["v_sx"]-G["v_ex"]),
+                              abs(G["v_lp"]-G["v_ex"]),
+                              abs(G["v_br"]-G["v_ex"])],
     })
     st.dataframe(cmp.style.format({
         "p₁* (Лок. деплой)": "{:.6f}",
@@ -653,9 +754,10 @@ x_i = \frac{p_i}{v'}\;\Rightarrow\;
     }), use_container_width=True)
 
     st.success(
-        f"✓ Все три метода согласованы: p₁*≈0.375=3/8, v*≈16.5%. "
-        f"Отклонение ЛП: {abs(G['v_lp']-G['v_ex']):.2e}. "
-        f"Отклонение БР: {abs(G['v_br']-G['v_ex']):.4f}."
+        f"✓ Все четыре метода согласованы: p₁*≈0.375=3/8, v*≈16.5%. "
+        f"Симплекс (чистый): {abs(G['v_sx']-G['v_ex']):.2e}. "
+        f"ЛП (HiGHS): {abs(G['v_lp']-G['v_ex']):.2e}. "
+        f"Браун–Робинсон: {abs(G['v_br']-G['v_ex']):.4f}."
     )
 
     st.markdown('<p class="sec-head">8. Верификация равновесия Нэша</p>', unsafe_allow_html=True)
