@@ -577,13 +577,19 @@ A' = A_{\text{red}} + c
 \quad\text{при}\quad
 A'^\top x \geq \mathbf{1}_n
 """)
-        st.markdown(r"""
-**Восстановление оптимума:**
-$$v' = \frac{1}{\sum y_i^*},\quad q_j^* = y_j^* \cdot v',\quad
-  p_i^* = \lambda_i \cdot v',\quad v^* = v' - c$$
-где $\lambda_i$ — теневые цены (двойственные переменные) = значения балансовых столбцов
-в целевой строке финального симплекс-табло.
+        st.markdown("**Восстановление оптимума:**")
+        st.latex(r"""
+v' = \frac{1}{\sum_j y_j^*},\qquad
+q_j^* = y_j^*\,v',\qquad
+p_i^* = \frac{\lambda_i}{\sum_k \lambda_k},\qquad
+v^* = v' - c
 """)
+        st.markdown(
+            r"Здесь $\lambda_i$ — теневые цены (двойственные переменные) ограничений "
+            r"$A'y + s = \mathbf{1}$: значения столбцов $s_i$ в строке $z$ финального табло. "
+            r"При оптимуме $\sum_k \lambda_k = 1/v'$, поэтому "
+            r"$p_i^* = \lambda_i/\sum_k \lambda_k = \lambda_i\,v'$."
+        )
 
     with st.expander("Начальное симплекс-табло", expanded=False):
         st.markdown(
@@ -653,8 +659,8 @@ $$v' = \frac{1}{\sum y_i^*},\quad q_j^* = y_j^* \cdot v',\quad
                 dual_val = T_fin[m_r, n_c + i]
                 p_i = G["p_sx"][i]
                 st.latex(
-                    rf"\lambda_{i+1} = {dual_val:.6f},"
-                    rf"\quad p_{i+1}^* = \lambda_{i+1}/\sum\lambda = {p_i:.6f}"
+                    rf"\lambda_{{i+1}} = {dual_val:.6f},\quad "
+                    rf"p_{{i+1}}^* = \frac{{\lambda_{{i+1}}}}{{\sum_k \lambda_k}} = {p_i:.6f}"
                 )
         with col_qx:
             st.markdown("**Стратегия B** (из базисных переменных в b-столбце):")
