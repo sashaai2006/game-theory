@@ -98,11 +98,14 @@ def style_payoff_matrix(df: pd.DataFrame) -> pd.DataFrame:
 
 
 @st.cache_data
-def compute_all():
+def compute_all(cache_version: int):
+    # Streamlit Cloud can keep data cache across deploys; bump this when
+    # the structure returned by run_all_computations changes.
+    _ = cache_version
     return run_all_computations(n_br_iter=1000)
 
 
-G = compute_all()
+G = compute_all(cache_version=2)
 
 p_opt  = float(G["p_ex"])
 q_full = G["q_ex_full"]
