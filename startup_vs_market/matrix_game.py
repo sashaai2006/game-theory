@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
-from scipy.optimize import linprog
 
 from .config import COL_NAMES, MATRIX, ROW_NAMES
 
@@ -196,35 +195,6 @@ def dominance_reduction(
     return m, rn, cn, kept_col_idx, removed
 
 
-def solve_lp(matrix: np.ndarray) -> tuple[np.ndarray, np.ndarray, float]:
-    m_rows, n_cols = matrix.shape
-    c_shift = max(0.0, -matrix.min()) + 1.0
-    A = matrix + c_shift
-
-    res_a = linprog(
-        c=np.ones(m_rows),
-        A_ub=-A.T,
-        b_ub=-np.ones(n_cols),
-        bounds=[(0, None)] * m_rows,
-        method="highs",
-    )
-    v_prime_a = 1.0 / res_a.fun
-    p_opt = res_a.x * v_prime_a
-    v_opt = v_prime_a - c_shift
-
-    res_b = linprog(
-        c=-np.ones(n_cols),
-        A_ub=A,
-        b_ub=np.ones(m_rows),
-        bounds=[(0, None)] * n_cols,
-        method="highs",
-    )
-    opt_sum_y = -res_b.fun
-    v_prime_b = 1.0 / opt_sum_y
-    q_opt = res_b.x * v_prime_b
-
-    return p_opt, q_opt, v_opt
-
 
 def brown_robinson(
     matrix: np.ndarray,
@@ -301,7 +271,6 @@ def run_all_computations(n_br_iter: int = 1000) -> dict[str, Any]:
     alpha_orig, beta_orig, sp_orig = saddle_point(MATRIX)
     alpha_red, beta_red, sp_red = saddle_point(red_matrix)
 
-    p_lp, q_lp_r, v_lp = solve_lp(red_matrix)
     p_sx, q_sx_r, v_sx, sx_info = solve_simplex(red_matrix)
     p_br, q_br_r, v_br, v_lo, v_hi, rows_hist, cols_hist = brown_robinson(
         red_matrix, n_iter=n_br_iter
@@ -317,12 +286,10 @@ def run_all_computations(n_br_iter: int = 1000) -> dict[str, Any]:
 
     q_ex_vec = np.array([q_ex, 1.0 - q_ex])
     n_full = int(MATRIX.shape[1])
-    q_lp_full = np.zeros(n_full)
     q_sx_full = np.zeros(n_full)
     q_br_full = np.zeros(n_full)
     q_ex_full = np.zeros(n_full)
     for ir, io in enumerate(kept):
-        q_lp_full[io] = q_lp_r[ir]
         q_sx_full[io] = q_sx_r[ir]
         q_br_full[io] = q_br_r[ir]
         q_ex_full[io] = q_ex_vec[ir]
@@ -346,10 +313,6 @@ def run_all_computations(n_br_iter: int = 1000) -> dict[str, Any]:
         "a_r": alpha_red,
         "b_r": beta_red,
         "sp_r": sp_red,
-        "p_lp": p_lp,
-        "q_lp_r": q_lp_r,
-        "q_lp_full": q_lp_full,
-        "v_lp": v_lp,
         "p_sx": p_sx,
         "q_sx_r": q_sx_r,
         "q_sx_full": q_sx_full,

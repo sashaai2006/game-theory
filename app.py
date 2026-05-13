@@ -157,7 +157,7 @@ with col_metrics:
 st.markdown("<br>", unsafe_allow_html=True)
 st.markdown(
     '<span class="badge-green">✓ Равновесие Нэша найдено</span>&nbsp;'
-    '<span class="badge-blue">4 метода согласованы</span>&nbsp;'
+    '<span class="badge-blue">3 метода согласованы</span>&nbsp;'
     '<span class="badge-red">«Стабильный» доминируется</span>',
     unsafe_allow_html=True,
 )
@@ -729,22 +729,18 @@ $$v' = \frac{1}{\sum y_i^*},\quad q_j^* = y_j^* \cdot v',\quad
     )
     st.plotly_chart(fig_br, use_container_width=True)
 
-    st.markdown('<p class="sec-head">7. Сравнение четырёх методов</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sec-head">7. Сравнение трёх методов</p>', unsafe_allow_html=True)
 
     cmp = pd.DataFrame({
         "Метод": [
             "Аналитический (формула 2×2)",
             "Симплекс-метод (чистый)",
-            "ЛП (SciPy HiGHS — контроль)",
             "Браун–Робинсон (1000 ит.)",
         ],
-        "p₁* (Лок. деплой)": [G["p_ex"],   G["p_sx"][0], G["p_lp"][0], G["p_br"][0]],
-        "p₂* (Облачный)":    [1-G["p_ex"], G["p_sx"][1], G["p_lp"][1], G["p_br"][1]],
-        "v* (цена игры)":    [G["v_ex"],   G["v_sx"],    G["v_lp"],    G["v_br"]],
-        "|Δv|":              [0.0,
-                              abs(G["v_sx"]-G["v_ex"]),
-                              abs(G["v_lp"]-G["v_ex"]),
-                              abs(G["v_br"]-G["v_ex"])],
+        "p₁* (Лок. деплой)": [G["p_ex"],   G["p_sx"][0], G["p_br"][0]],
+        "p₂* (Облачный)":    [1-G["p_ex"], G["p_sx"][1], G["p_br"][1]],
+        "v* (цена игры)":    [G["v_ex"],   G["v_sx"],    G["v_br"]],
+        "|Δv|":              [0.0, abs(G["v_sx"]-G["v_ex"]), abs(G["v_br"]-G["v_ex"])],
     })
     st.dataframe(cmp.style.format({
         "p₁* (Лок. деплой)": "{:.6f}",
@@ -754,9 +750,8 @@ $$v' = \frac{1}{\sum y_i^*},\quad q_j^* = y_j^* \cdot v',\quad
     }), use_container_width=True)
 
     st.success(
-        f"✓ Все четыре метода согласованы: p₁*≈0.375=3/8, v*≈16.5%. "
+        f"✓ Все три метода согласованы: p₁*≈0.375=3/8, v*≈16.5%. "
         f"Симплекс (чистый): {abs(G['v_sx']-G['v_ex']):.2e}. "
-        f"ЛП (HiGHS): {abs(G['v_lp']-G['v_ex']):.2e}. "
         f"Браун–Робинсон: {abs(G['v_br']-G['v_ex']):.4f}."
     )
 
