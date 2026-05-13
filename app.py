@@ -99,8 +99,6 @@ def style_payoff_matrix(df: pd.DataFrame) -> pd.DataFrame:
 
 @st.cache_data
 def compute_all(cache_version: int):
-    # Streamlit Cloud can keep data cache across deploys; bump this when
-    # the structure returned by run_all_computations changes.
     _ = cache_version
     return run_all_computations(n_br_iter=1000)
 
@@ -551,8 +549,8 @@ E_2\!\left(\tfrac{3}{8}\right) = -12\cdot\tfrac{3}{8}+21 = -4.5+21 = 16.5 \;\che
 
     sx = G["sx_info"]
     n_c, m_r = sx["n_cols"], sx["m_rows"]
-    cn_sx = G["cn"]   # column names of reduced matrix
-    rn_sx = G["rn"]   # row names of reduced matrix
+    cn_sx = G["cn"]
+    rn_sx = G["rn"]
 
     with st.expander("Постановка ЛП и замена переменных", expanded=False):
         st.markdown("**Задача Игрока B (прямая):**")

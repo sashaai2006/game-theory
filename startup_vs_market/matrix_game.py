@@ -6,64 +6,33 @@ import numpy as np
 
 from .config import COL_NAMES, MATRIX, ROW_NAMES
 
-# ---------------------------------------------------------------------------
-# Pure simplex method (Tableau form)
-# ---------------------------------------------------------------------------
-
 
 def solve_simplex(
     matrix: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray, float, dict[str, Any]]:
-    """Solve the matrix game with the **pure simplex method** (no external LP solver).
-
-    Formulation used (Player B – minimiser):
-        max  1ᵀ y
-        s.t. A' y + s = 1_m,   y ≥ 0,  s ≥ 0          (1)
-    where A' = matrix + c_shift (all entries > 0).
-    The initial BFS is y = 0, s = 1 (slack variables as basis).
-
-    Player A's optimal mixed strategy is extracted from the **dual solution**:
-    the shadow-prices of (1) equal the optimal x for the dual LP
-        min  1ᵀ x
-        s.t. A'ᵀ x ≥ 1_n,   x ≥ 0                      (2)
-    These shadow-prices appear in the final objective row at the slack columns.
-
-    Returns
-    -------
-    p_opt : ndarray  – Player A's optimal mixed strategy
-    q_opt : ndarray  – Player B's optimal mixed strategy
-    v_opt : float    – Value of the game
-    info  : dict     – Tableau snapshots and metadata for UI display
-    """
     m_rows, n_cols = matrix.shape
     c_shift = max(0.0, -matrix.min()) + 1.0
-    A = matrix + c_shift  # shifted matrix, all entries > 0
+    A = matrix + c_shift
 
-    # ---- Build initial tableau ------------------------------------------------
-    # Variables layout: [y_1 … y_n | s_1 … s_m | b]
     n_vars = n_cols + m_rows
     T = np.zeros((m_rows + 1, n_vars + 1))
 
-    T[:m_rows, :n_cols] = A                            # coefficients of y
-    T[:m_rows, n_cols:n_vars] = np.eye(m_rows)        # identity for slacks
-    T[:m_rows, n_vars] = 1.0                           # RHS = 1
+    T[:m_rows, :n_cols] = A
+    T[:m_rows, n_cols:n_vars] = np.eye(m_rows)
+    T[:m_rows, n_vars] = 1.0
 
-    # Objective row (tracking  z - cᵀx = 0,  c = [1…1, 0…0])
-    # We store the negated reduced costs; RHS accumulates z.
-    T[m_rows, :n_cols] = -1.0  # for y variables
-    # Slack columns start at 0 (c_slack = 0)
+    T[m_rows, :n_cols] = -1.0
 
-    basis = list(range(n_cols, n_vars))  # initially all slack variables
+    basis = list(range(n_cols, n_vars))
 
-    # ---- Pivot iterations -----------------------------------------------------
     tableau_snapshots: list[dict[str, Any]] = []
 
     def _snapshot(it: int, entering: int, leaving: int) -> None:
         tableau_snapshots.append({
             "iteration": it,
-            "entering": entering,  # column index
-            "leaving": leaving,    # column index (basis var being removed)
-            "tableau": T.copy(),   # snapshot BEFORE pivot
+            "entering": entering,
+            "leaving": leaving,
+            "tableau": T.copy(),
         })
 
     max_iter = 10 * n_vars
@@ -72,9 +41,8 @@ def solve_simplex(
         j_enter = int(np.argmin(obj_row))
 
         if obj_row[j_enter] >= -1e-9:
-            break  # optimality reached
+            break
 
-        # Minimum-ratio test
         col = T[:m_rows, j_enter]
         rhs = T[:m_rows, n_vars]
         with np.errstate(divide="ignore", invalid="ignore"):
@@ -83,7 +51,6 @@ def solve_simplex(
 
         _snapshot(iteration, j_enter, basis[i_leave])
 
-        # Pivot: normalise leaving row, eliminate column
         pivot_val = T[i_leave, j_enter]
         T[i_leave] /= pivot_val
         for i in range(m_rows + 1):
@@ -92,7 +59,6 @@ def solve_simplex(
 
         basis[i_leave] = j_enter
 
-    # ---- Extract primal solution (Player B's y) -------------------------------
     y_opt = np.zeros(n_cols)
     for idx, b_var in enumerate(basis):
         if b_var < n_cols:
@@ -103,7 +69,6 @@ def solve_simplex(
     q_opt = y_opt * v_prime
     v_opt = v_prime - c_shift
 
-    # ---- Extract dual solution (Player A's x) from slack columns of obj row --
     x_dual = T[m_rows, n_cols:n_vars].copy()
     sum_x = float(x_dual.sum())
     p_opt = x_dual / sum_x if sum_x > 1e-12 else np.ones(m_rows) / m_rows
@@ -193,7 +158,6 @@ def dominance_reduction(
             rn = [rn[i] for i in keep]
 
     return m, rn, cn, kept_col_idx, removed
-
 
 
 def brown_robinson(
